@@ -1,19 +1,42 @@
-import { Duration, Stack, StackProps } from 'aws-cdk-lib';
-import * as sns from 'aws-cdk-lib/aws-sns';
-import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
-import { Construct } from 'constructs';
-
-export class CdkWorkshopStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
+import * as cdk from 'aws-cdk-lib';
+import * as pipelines from 'aws-cdk-lib/pipelines';
+import * as codebuild from 'aws-cdk-lib/aws-codebuild';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import { githubUser, githubRepo, githubBranch, codeStarConnectionArn, awsAccount, awsRegion } from '../private/configuration';
+export class CdkWorkshopStack extends cdk.Stack {
+  constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const queue = new sqs.Queue(this, 'CdkWorkshopQueue', {
-      visibilityTimeout: Duration.seconds(300)
+    const dockerhubSecret = secretsmanager.Secret.fromSecretCompleteArn(this, 'pull-creds',
+      'arn:aws:secretsmanager:us-east-1:489318732371:secret:dockerhub/image-pull-credentials-pqF5ws');
+    console.log(dockerhubSecret.secretArn);
+
+    const pipeline = new pipelines.CodePipeline(this, 'Pipeline', {
+      synth: new pipelines.ShellStep('Synth', {
+        input: pipelines.CodePipelineSource.connection(`${githubUser}/${githubRepo}`, githubBranch, {
+          connectionArn: codeStarConnectionArn,
+        }),
+        commands: ['npm ci','npm run build','npx cdk synth'],
+      }),
+    
+      // Turn this on because the pipeline uses Docker image assets
+      dockerEnabledForSelfMutation: true,
+      dockerCredentials: [pipelines.DockerCredential.dockerHub(dockerhubSecret)],
     });
-
-    const topic = new sns.Topic(this, 'CdkWorkshopTopic');
-
-    topic.addSubscription(new subs.SqsSubscription(queue));
+    
+    pipeline.addWave('MyWave', {
+      post: [
+        new pipelines.CodeBuildStep('RunApproval', {
+          commands: ['npm ci','npm run build','npx cdk synth'],
+          buildEnvironment: {
+            // The user of a Docker image asset in the pipeline requires turning on
+            // 'dockerEnabledForSelfMutation'.
+            buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'Image', {
+              directory: './demo-image',
+            }),
+          },
+        }),
+      ],
+    });
   }
 }
