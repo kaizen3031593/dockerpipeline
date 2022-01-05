@@ -27,7 +27,7 @@ export class CdkWorkshopStack extends cdk.Stack {
     pipeline.addWave('MyWave', {
       post: [
         new pipelines.CodeBuildStep('RunApproval', {
-          commands: ['npm ci','npm run build','npx cdk synth'],
+          commands: ['python3 index.py'],
           buildEnvironment: {
             // The user of a Docker image asset in the pipeline requires turning on
             // 'dockerEnabledForSelfMutation'.
