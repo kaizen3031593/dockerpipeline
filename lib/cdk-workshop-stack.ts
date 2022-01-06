@@ -21,7 +21,10 @@ export class CdkWorkshopStack extends cdk.Stack {
     
       // Turn this on because the pipeline uses Docker image assets
       dockerEnabledForSelfMutation: true,
-      dockerCredentials: [pipelines.DockerCredential.dockerHub(dockerhubSecret)],
+      dockerCredentials: [
+        pipelines.DockerCredential.dockerHub(dockerhubSecret),
+        pipelines.DockerCredential.customRegistry('https://index.docker.io/v1/', dockerhubSecret),
+      ],
     });
     
     pipeline.addWave('MyWave', {
